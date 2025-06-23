@@ -7,8 +7,8 @@ umap_params:
         min_dist: 0.0
     combined:
         n_neighbors: 5
-        min_dist: 0.0
+        min_dist: 0.2
 hdbscan_params:
     min_samples: 50
-    min_cluster_size: 1000
+    min_cluster_size: 500
     gen_min_span_tree: true

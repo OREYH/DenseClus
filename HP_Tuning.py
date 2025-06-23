@@ -4,7 +4,6 @@
 UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버전)
  - 10만 개 전수 탐색은 시간이 오래 걸리므로 2만 개 샘플로 튜닝 → YAML 저장
  - 결과 로그는 results 폴더에, YAML 파일은 yaml 폴더에 저장
-   (각각 --save_name 뒤에 날짜와 시간이 붙은 파일명)
  - tqdm 프로그레스바로 실시간 진행률 출력
  - pathlib 대신 os 모듈만 사용
  - `set_global_seed()` 로 NumPy·random·PYTHONHASHSEED 모두 고정 → 반복 실행 시
@@ -60,6 +59,9 @@ def get_args():
     p = argparse.ArgumentParser(description="DenseClus 하이퍼파라미터 튜닝")
     p.add_argument("--data_path", default='./data/flat-training.csv', help="CSV 데이터 경로")
     p.add_argument("--save_name", default='hp_config', help="저장 파일 이름 (확장자 제외)")
+    p.add_argument("--method", type=str, 
+                   choices=["intersection", "union", "contrast", "intersection_union_mapper", "ensemble"],
+                   default='intersection_union_mapper')
     p.add_argument("--sample", type=int, default=None, help="튜닝용 샘플 수")
     p.add_argument("--dropna", action="store_true", help="결측 컬럼 제거 여부")
     p.add_argument("--seed", type=int, default=42, help="랜덤 시드")
@@ -83,11 +85,11 @@ def read_data(path: str, sample: int, dropna: bool, seed: int):
 # 평가 함수
 # ────────────────────────────────────────────────────────────────────────────────
 
-def evaluate(umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: int):
+def evaluate(method: str, umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: int):
     set_global_seed(seed)
     clf = DenseClus(
         random_state=seed,
-        umap_combine_method="intersection_union_mapper",
+        umap_combine_method=method,
         umap_params=umap_params,
         hdbscan_params=hdbscan_params,
     )
@@ -114,6 +116,7 @@ if __name__ == "__main__":
     save_prefix = f"{args.save_name}_{timestamp}"
     log_path = os.path.join("results", f"{save_prefix}.log")
     yaml_path = os.path.join("yaml", f"{save_prefix}.yaml")
+    
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(message)s",
@@ -157,7 +160,7 @@ if __name__ == "__main__":
 
     for u_params in umap_grid:
         for h_params in hdbscan_grid:
-            coverage, dbcv, n_clusters = evaluate(u_params, h_params, df, args.seed)
+            coverage, dbcv, n_clusters = evaluate(args.method, u_params, h_params, df, args.seed)
 
             msg = f"n_clusters: {n_clusters}"
             logger.info(msg)
@@ -171,13 +174,22 @@ if __name__ == "__main__":
 
             if score > best_score:
                 best_score = score
-                best_params = {"umap_params": u_params, "hdbscan_params": h_params}
 
+                best_params = {
+                    "n_samples": args.sample,
+                    "dropna": args.dropna,
+                    "method": args.method,
+                    "n_clusters": n_clusters,
+                    "umap_params": u_params,
+                    "hdbscan_params": h_params }
+
+                yaml_path = os.path.join("yaml", f"{args.save_name}.yaml")
                 with open(yaml_path, "w", encoding="utf-8") as f:
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
                 best_msg = (
-                    f"📈 New best → score={best_score:.4f} | cov={coverage:.3f}, dbcv={dbcv:.3f}"
+
+                    f"📈 New best → score={best_score:.4f} | cov={coverage:.6f}, dbcv={dbcv:.6f}"
                 )
                 logger.info(best_msg)
                 pbar.write("\n" + best_msg)
