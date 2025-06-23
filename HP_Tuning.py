@@ -56,6 +56,9 @@ def get_args():
     p = argparse.ArgumentParser(description="DenseClus 하이퍼파라미터 튜닝")
     p.add_argument("--data_path", default='./data/flat-training.csv', help="CSV 데이터 경로")
     p.add_argument("--save_name", default='hp_config', help="저장 파일 이름 (확장자 제외)")
+    p.add_argument("--method", type=str, 
+                   choices=["intersection", "union", "contrast", "intersection_union_mapper", "ensemble"],
+                   default='intersection_union_mapper')
     p.add_argument("--sample", type=int, default=None, help="튜닝용 샘플 수")
     p.add_argument("--dropna", action="store_true", help="결측 컬럼 제거 여부")
     p.add_argument("--seed", type=int, default=42, help="랜덤 시드")
@@ -79,11 +82,11 @@ def read_data(path: str, sample: int, dropna: bool, seed: int):
 # 평가 함수
 # ────────────────────────────────────────────────────────────────────────────────
 
-def evaluate(umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: int):
+def evaluate(method: str, umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: int):
     set_global_seed(seed)
     clf = DenseClus(
         random_state=seed,
-        umap_combine_method="intersection_union_mapper",
+        umap_combine_method=method,
         umap_params=umap_params,
         hdbscan_params=hdbscan_params,
     )
@@ -150,7 +153,7 @@ if __name__ == "__main__":
 
     for u_params in umap_grid:
         for h_params in hdbscan_grid:
-            coverage, dbcv, n_clusters = evaluate(u_params, h_params, df, args.seed)
+            coverage, dbcv, n_clusters = evaluate(args.method, u_params, h_params, df, args.seed)
 
             msg = f"n_clusters: {n_clusters}"
             logger.info(msg)
@@ -164,14 +167,19 @@ if __name__ == "__main__":
 
             if score > best_score:
                 best_score = score
-                best_params = {"umap_params": u_params, "hdbscan_params": h_params}
+                best_params = {
+                    "n_samples": args.sample,
+                    "n_clusters": n_clusters,
+                    "dropna": args.dropna,
+                    "umap_params": u_params,
+                    "hdbscan_params": h_params }
 
                 yaml_path = os.path.join("yaml", f"{args.save_name}.yaml")
                 with open(yaml_path, "w", encoding="utf-8") as f:
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
                 best_msg = (
-                    f"📈 New best → score={best_score:.4f} | cov={coverage:.3f}, dbcv={dbcv:.3f}"
+                    f"📈 New best → score={best_score:.4f} | cov={coverage:.6f}, dbcv={dbcv:.6f}"
                 )
                 logger.info(best_msg)
                 pbar.write("\n" + best_msg)
