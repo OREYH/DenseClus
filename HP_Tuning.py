@@ -3,6 +3,7 @@
 -------------------------------------------------------
 UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버전)
  - 10만 개 전수 탐색은 시간이 오래 걸리므로 2만 개 샘플로 튜닝 → YAML 저장
+ - 결과 로그는 results 폴더에, YAML 파일은 yaml 폴더에 저장
  - tqdm 프로그레스바로 실시간 진행률 출력
  - pathlib 대신 os 모듈만 사용
  - `set_global_seed()` 로 NumPy·random·PYTHONHASHSEED 모두 고정 → 반복 실행 시
@@ -11,7 +12,7 @@ UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버�
 사용 예)
     python tune_denseclus.py \
         --data_path ./data/train.csv \
-        --save_yaml ./configs/best_denseclus.yaml \
+        --save_name best_denseclus \
         --sample 20000 \
         --seed 42
 """
@@ -21,6 +22,7 @@ import argparse
 import warnings
 import random
 from itertools import product
+import logging
 
 import numpy as np
 import pandas as pd
@@ -53,7 +55,7 @@ def set_global_seed(seed: int):
 def get_args():
     p = argparse.ArgumentParser(description="DenseClus 하이퍼파라미터 튜닝")
     p.add_argument("--data_path", default='./data/flat-training.csv', help="CSV 데이터 경로")
-    p.add_argument("--save_yaml", default='./config', help="최적 파라미터 YAML 저장 경로")
+    p.add_argument("--save_name", default='hp_config', help="저장 파일 이름 (확장자 제외)")
     p.add_argument("--sample", type=int, default=None, help="튜닝용 샘플 수")
     p.add_argument("--dropna", action="store_true", help="결측 컬럼 제거 여부")
     p.add_argument("--seed", type=int, default=42, help="랜덤 시드")
@@ -101,6 +103,20 @@ if __name__ == "__main__":
     args = get_args()
     set_global_seed(args.seed)
 
+    os.makedirs("results", exist_ok=True)
+    os.makedirs("yaml", exist_ok=True)
+
+    log_path = os.path.join("results", f"{args.save_name}.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_path, encoding="utf-8"),
+            logging.StreamHandler(),
+        ],
+    )
+    logger = logging.getLogger(__name__)
+
     # 데이터 준비
     df = read_data(args.data_path, args.sample, args.dropna, args.seed)
 
@@ -136,11 +152,13 @@ if __name__ == "__main__":
         for h_params in hdbscan_grid:
             coverage, dbcv, n_clusters = evaluate(u_params, h_params, df, args.seed)
 
-            print("\n n_clusters: {}".format(n_clusters))
+            msg = f"n_clusters: {n_clusters}"
+            logger.info(msg)
+            pbar.write("\n " + msg)
 
             # 클러스터 수가 10을 넘어가면 다음 루프로 진행
             if n_clusters > args.max_clusters:
-                print("\n 클러스터 수가 10을 초과하므로 다음 루프로 넘깁니다.")
+                logger.info("클러스터 수가 10을 초과하므로 다음 루프로 넘깁니다.")
                 continue
             score = coverage * dbcv
 
@@ -148,17 +166,20 @@ if __name__ == "__main__":
                 best_score = score
                 best_params = {"umap_params": u_params, "hdbscan_params": h_params}
 
-                with open(args.save_yaml, "w", encoding="utf-8") as f:
+                yaml_path = os.path.join("yaml", f"{args.save_name}.yaml")
+                with open(yaml_path, "w", encoding="utf-8") as f:
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
-                pbar.write(
-                    f"\n📈 New best → score={best_score:.4f} | cov={coverage:.3f}, dbcv={dbcv:.3f}"
+                best_msg = (
+                    f"📈 New best → score={best_score:.4f} | cov={coverage:.3f}, dbcv={dbcv:.3f}"
                 )
+                logger.info(best_msg)
+                pbar.write("\n" + best_msg)
 
             pbar.update(1)
 
     pbar.close()
 
-    print("\n✅ 튜닝 완료!")
-    print("Best score  :", best_score)
-    print("Best params :\n", yaml.safe_dump(best_params, sort_keys=False))
+    logger.info("✅ 튜닝 완료!")
+    logger.info(f"Best score  : {best_score}")
+    logger.info("Best params :\n" + yaml.safe_dump(best_params, sort_keys=False))
