@@ -135,7 +135,12 @@ if __name__ == "__main__":
     for u_params in umap_grid:
         for h_params in hdbscan_grid:
             coverage, dbcv, n_clusters = evaluate(u_params, h_params, df, args.seed)
+
+            print("\n n_clusters: {}".format(n_clusters))
+
+            # 클러스터 수가 10을 넘어가면 다음 루프로 진행
             if n_clusters > args.max_clusters:
+                print("\n 클러스터 수가 10을 초과하므로 다음 루프로 넘깁니다.")
                 continue
             score = coverage * dbcv
 
@@ -143,8 +148,6 @@ if __name__ == "__main__":
                 best_score = score
                 best_params = {"umap_params": u_params, "hdbscan_params": h_params}
 
-                # 즉시 YAML 저장
-                os.makedirs(os.path.dirname(args.save_yaml), exist_ok=True)
                 with open(args.save_yaml, "w", encoding="utf-8") as f:
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 

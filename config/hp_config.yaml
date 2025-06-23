@@ -1,0 +1,14 @@
+umap_params:
+    categorical:
+        n_neighbors: 15
+        min_dist: 0.0
+    numerical:
+        n_neighbors: 20
+        min_dist: 0.0
+    combined:
+        n_neighbors: 5
+        min_dist: 0.0
+hdbscan_params:
+    min_samples: 50
+    min_cluster_size: 1000
+    gen_min_span_tree: true
