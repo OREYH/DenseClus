@@ -2,7 +2,7 @@
 """tune_denseclus.py
 -------------------------------------------------------
 UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버전)
- - 10만 개 전수 탐색은 시간이 오래 걸리므로 2만 개 샘플로 튜닝 → YAML 저장
+ - YAML 저장
  - 결과 로그는 results 폴더에, YAML 파일은 yaml 폴더에 저장
  - `set_global_seed()` 로 NumPy·random·PYTHONHASHSEED 모두 고정 → 반복 실행 시
    동일한 coverage / DBCV 보장
@@ -139,11 +139,11 @@ if __name__ == "__main__":
         }
         for n_cat, m_cat, n_num, m_num, n_com, m_com in product(
             [15, 30],
-            [0.0, 0.1, 0.2],
+            [0.0, 0.2],
             [20, 40],
-            [0.0, 0.1, 0.2],
+            [0.0, 0.2],
             [5, 10],
-            [0.0, 0.1, 0.2],
+            [0.0, 0.2],
         )
     ]
 
