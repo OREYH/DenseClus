@@ -169,8 +169,9 @@ if __name__ == "__main__":
                 best_score = score
                 best_params = {
                     "n_samples": args.sample,
-                    "n_clusters": n_clusters,
                     "dropna": args.dropna,
+                    "method": args.method,
+                    "n_clusters": n_clusters,
                     "umap_params": u_params,
                     "hdbscan_params": h_params }
 
