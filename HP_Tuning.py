@@ -4,8 +4,6 @@
 UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버전)
  - 10만 개 전수 탐색은 시간이 오래 걸리므로 2만 개 샘플로 튜닝 → YAML 저장
  - 결과 로그는 results 폴더에, YAML 파일은 yaml 폴더에 저장
- - tqdm 프로그레스바로 실시간 진행률 출력
- - pathlib 대신 os 모듈만 사용
  - `set_global_seed()` 로 NumPy·random·PYTHONHASHSEED 모두 고정 → 반복 실행 시
    동일한 coverage / DBCV 보장
 -------------------------------------------------------
@@ -114,6 +112,8 @@ if __name__ == "__main__":
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_prefix = f"{args.save_name}_{timestamp}"
+
+    # 파일 저장 경로
     log_path = os.path.join("results", f"{save_prefix}.log")
     yaml_path = os.path.join("yaml", f"{save_prefix}.yaml")
     
@@ -139,11 +139,11 @@ if __name__ == "__main__":
         }
         for n_cat, m_cat, n_num, m_num, n_com, m_com in product(
             [15, 30],
-            [0.0, 0.2],
+            [0.0, 0.1, 0.2],
             [20, 40],
-            [0.0, 0.2],
+            [0.0, 0.1, 0.2],
             [5, 10],
-            [0.0, 0.2],
+            [0.0, 0.1, 0.2],
         )
     ]
 
@@ -183,14 +183,11 @@ if __name__ == "__main__":
                     "umap_params": u_params,
                     "hdbscan_params": h_params }
 
-                yaml_path = os.path.join("yaml", f"{args.save_name}.yaml")
                 with open(yaml_path, "w", encoding="utf-8") as f:
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
                 best_msg = (
-
-                    f"📈 New best → score={best_score:.4f} | cov={coverage:.6f}, dbcv={dbcv:.6f}"
-                )
+                    f"📈 New best → score={best_score:.4f} | cov={coverage:.6f}, dbcv={dbcv:.6f}" )
                 logger.info(best_msg)
                 pbar.write("\n" + best_msg)
 
