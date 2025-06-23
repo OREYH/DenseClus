@@ -51,12 +51,13 @@ def set_global_seed(seed: int):
 # ────────────────────────────────────────────────────────────────────────────────
 
 def get_args():
-    p = argparse.ArgumentParser(description="DenseClus 하이퍼파라미터 튜닝 (reproducible)")
-    p.add_argument("--data_path", required=True, help="CSV 데이터 경로")
-    p.add_argument("--save_yaml", required=True, help="최적 파라미터 YAML 저장 경로")
+    p = argparse.ArgumentParser(description="DenseClus 하이퍼파라미터 튜닝")
+    p.add_argument("--data_path", default='./data/flat-training.csv', help="CSV 데이터 경로")
+    p.add_argument("--save_yaml", default='./config', help="최적 파라미터 YAML 저장 경로")
     p.add_argument("--sample", type=int, default=None, help="튜닝용 샘플 수")
     p.add_argument("--dropna", action="store_true", help="결측 컬럼 제거 여부")
     p.add_argument("--seed", type=int, default=42, help="랜덤 시드")
+    p.add_argument("--max_clusters", type=int, default=10, help='최대 클러스터 개수')
     return p.parse_args()
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -88,7 +89,9 @@ def evaluate(umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: 
     labels = clf.labels_
     coverage = (labels >= 0).mean()  # 군집에 속한 비율
     dbcv = clf.hdbscan_.relative_validity_
-    return coverage, dbcv
+    n_cluster = len(np.unique(labels[labels >= 0]))
+
+    return coverage, dbcv, n_cluster
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 메인
@@ -120,7 +123,7 @@ if __name__ == "__main__":
 
     hdbscan_grid = [
         {"min_samples": ms, "min_cluster_size": mcs, "gen_min_span_tree": True}
-        for ms, mcs in product([10, 30, 50], [100, 200, 300])
+        for ms, mcs in product([50, 100], [500, 1000, 2000])
     ]
 
     total_iter = len(umap_grid) * len(hdbscan_grid)
@@ -131,7 +134,9 @@ if __name__ == "__main__":
 
     for u_params in umap_grid:
         for h_params in hdbscan_grid:
-            coverage, dbcv = evaluate(u_params, h_params, df, args.seed)
+            coverage, dbcv, n_clusters = evaluate(u_params, h_params, df, args.seed)
+            if n_clusters > args.max_clusters:
+                continue
             score = coverage * dbcv
 
             if score > best_score:
@@ -141,7 +146,7 @@ if __name__ == "__main__":
                 # 즉시 YAML 저장
                 os.makedirs(os.path.dirname(args.save_yaml), exist_ok=True)
                 with open(args.save_yaml, "w", encoding="utf-8") as f:
-                    yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=2)
+                    yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
                 pbar.write(
                     f"\n📈 New best → score={best_score:.4f} | cov={coverage:.3f}, dbcv={dbcv:.3f}"
