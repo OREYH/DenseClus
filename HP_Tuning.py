@@ -15,6 +15,8 @@ UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버�
         --save_name best_denseclus \
         --sample 20000 \
         --seed 42
+    # 결과 파일은 yaml/best_denseclus_<날짜시간>.yaml, 
+    # 로그 파일은 results/best_denseclus_<날짜시간>.log 로 저장
 """
 
 import os
@@ -23,6 +25,7 @@ import warnings
 import random
 from itertools import product
 import logging
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -109,7 +112,11 @@ if __name__ == "__main__":
     os.makedirs("results", exist_ok=True)
     os.makedirs("yaml", exist_ok=True)
 
-    log_path = os.path.join("results", f"{args.save_name}.log")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_prefix = f"{args.save_name}_{timestamp}"
+    log_path = os.path.join("results", f"{save_prefix}.log")
+    yaml_path = os.path.join("yaml", f"{save_prefix}.yaml")
+    
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(message)s",
@@ -167,6 +174,7 @@ if __name__ == "__main__":
 
             if score > best_score:
                 best_score = score
+
                 best_params = {
                     "n_samples": args.sample,
                     "dropna": args.dropna,
@@ -180,6 +188,7 @@ if __name__ == "__main__":
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
                 best_msg = (
+
                     f"📈 New best → score={best_score:.4f} | cov={coverage:.6f}, dbcv={dbcv:.6f}"
                 )
                 logger.info(best_msg)
@@ -190,5 +199,7 @@ if __name__ == "__main__":
     pbar.close()
 
     logger.info("✅ 튜닝 완료!")
+    logger.info(f"YAML saved to: {yaml_path}")
+    logger.info(f"Log saved to : {log_path}")
     logger.info(f"Best score  : {best_score}")
     logger.info("Best params :\n" + yaml.safe_dump(best_params, sort_keys=False))
