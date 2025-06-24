@@ -17,7 +17,8 @@ UMAP + HDBSCAN 하이퍼파라미터 탐색 스크립트 (재현성 강화 버�
     # 로그 파일은 results/best_denseclus_<날짜시간>.log 로 저장
 """
 
-import os
+import psutil, threading
+import os, time
 import argparse
 import warnings
 import random
@@ -31,6 +32,11 @@ import yaml
 from tqdm import tqdm
 
 from denseclus import DenseClus
+
+def monitor_cpu():
+    while True:
+        print(f"CPU usage: {psutil.cpu_percent()}%")
+        time.sleep(10)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 경고 억제 (sklearn force_all_finite)
@@ -104,6 +110,10 @@ def evaluate(method: str, umap_params: dict, hdbscan_params: dict, data: pd.Data
 # ────────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+
+    # t = threading.Thread(target=monitor_cpu, daemon=True)
+    # t.start()
+
     args = get_args()
     set_global_seed(args.seed)
 
@@ -149,7 +159,7 @@ if __name__ == "__main__":
 
     hdbscan_grid = [
         {"min_samples": ms, "min_cluster_size": mcs, "gen_min_span_tree": True}
-        for ms, mcs in product([50, 100], [500, 1000, 2000])
+        for ms, mcs in product([50], [500, 1000, 2000])
     ]
 
     total_iter = len(umap_grid) * len(hdbscan_grid)
