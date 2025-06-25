@@ -1,0 +1,21 @@
+setting:
+    seed: 42
+    n_samples: null
+    dropna: true
+    method: intersection_union_mapper
+    max_clusters: 10
+n_clusters: 3
+umap_params:
+    categorical:
+        n_neighbors: 30
+        min_dist: 0.0
+    numerical:
+        n_neighbors: 40
+        min_dist: 0.2
+    combined:
+        n_neighbors: 5
+        min_dist: 0.2
+hdbscan_params:
+    min_samples: 50
+    min_cluster_size: 1000
+    gen_min_span_tree: true

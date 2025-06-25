@@ -62,7 +62,7 @@ def set_global_seed(seed: int):
 def get_args():
     p = argparse.ArgumentParser(description="DenseClus 하이퍼파라미터 튜닝")
     p.add_argument("--data_path", default='./data/flat-training.csv', help="CSV 데이터 경로")
-    p.add_argument("--save_name", default='hp_config', help="저장 파일 이름 (확장자 제외)")
+    p.add_argument("--save_path", default='./results', help="실험 결과 저장 경로")
     p.add_argument("--method", type=str, 
                    choices=["intersection", "union", "contrast", "intersection_union_mapper", "ensemble"],
                    default='intersection_union_mapper')
@@ -88,8 +88,20 @@ def read_data(path: str, sample: int, dropna: bool, seed: int):
 # ────────────────────────────────────────────────────────────────────────────────
 # 평가 함수
 # ────────────────────────────────────────────────────────────────────────────────
+def cluster_uniformity(counts: pd.DataFrame, eps: float = 1e-12) -> float:
+    """
+    0(최악) ~ 1(최고) 사이 균형 점수 반환.
+    """
+    counts_arr = counts.loc[counts['cluster'] != -1, "count"].values # -1 제외
+    
+    k = len(counts_arr) # 클러스터 개수
+    p = counts_arr / counts_arr.sum() # 비율
+    entropy = -np.sum(p * np.log(p + eps))
 
-def evaluate(method: str, umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: int):
+    return float(entropy / np.log(k)) # 정규화
+
+
+def evaluate(method: str, umap_params: dict, hdbscan_params: dict, data: pd.DataFrame, seed: int, logger: logging.Logger):
     set_global_seed(seed)
     clf = DenseClus(
         random_state=seed,
@@ -99,11 +111,26 @@ def evaluate(method: str, umap_params: dict, hdbscan_params: dict, data: pd.Data
     )
     clf.fit(data)
     labels = clf.labels_
-    coverage = (labels >= 0).mean()  # 군집에 속한 비율
-    dbcv = clf.hdbscan_.relative_validity_
-    n_cluster = len(np.unique(labels[labels >= 0]))
 
-    return coverage, dbcv, n_cluster
+    try:
+        cnts = pd.DataFrame(clf.evaluate())[0].value_counts()
+        cnts = cnts.reset_index()
+        cnts.columns = ['cluster', 'count']
+        cnts = cnts.sort_values(['cluster'], ignore_index=True)
+
+        uniformity = cluster_uniformity(cnts)
+
+        coverage = (labels >= 0).mean()  # 군집에 속한 비율
+        dbcv = clf.hdbscan_.relative_validity_ # type: ignore
+        n_cluster = len(np.unique(labels[labels >= 0]))
+
+        return coverage, dbcv, n_cluster, uniformity
+    
+    except Exception as e:
+        # 로그
+        err_message = f"[WARN] evalute 실패: {e}"
+        logger.info(err_message)
+        return None
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 메인
@@ -126,15 +153,15 @@ if __name__ == "__main__":
         "max_clusters": args.max_clusters
     }
 
-    os.makedirs("results", exist_ok=True)
-    os.makedirs("yaml", exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_prefix = f"{args.save_name}_{timestamp}"
+
+    save_path = os.path.join(args.save_path, timestamp)
+    os.makedirs(save_path)
 
     # 파일 저장 경로
-    log_path = os.path.join("results", f"{save_prefix}.log")
-    yaml_path = os.path.join("yaml", f"{save_prefix}.yaml")
+    log_path = os.path.join(save_path, "train.log")
+    yaml_path = os.path.join(save_path, "config.yaml")
     
     logging.basicConfig(
         level=logging.INFO,
@@ -171,7 +198,7 @@ if __name__ == "__main__":
         for ms, mcs in product([50], [500, 1000, 2000])
     ]
 
-    total_iter = len(umap_grid) * len(hdbscan_grid)
+    total_iter = len(umap_grid) * len(hdbscan_grid) // 2
     pbar = tqdm(total=total_iter, desc="Grid Search", ncols=110, colour="cyan")
 
     best_score = float("-inf")
@@ -179,17 +206,29 @@ if __name__ == "__main__":
 
     for u_params in umap_grid:
         for h_params in hdbscan_grid:
-            coverage, dbcv, n_clusters = evaluate(args.method, u_params, h_params, df, args.seed)
+            result = evaluate(args.method, u_params, h_params, df, args.seed, logger)
+
+            if result is None:
+                continue
+            coverage, dbcv, n_clusters, uniformity = result
 
             msg = f"n_clusters: {n_clusters}"
             logger.info(msg)
             pbar.write("\n " + msg)
 
-            # 클러스터 수가 10을 넘어가면 다음 루프로 진행
+            # 클러스터 수가 args.max_clusters을 넘어가면 다음 루프로 진행
             if n_clusters > args.max_clusters:
                 logger.info("클러스터 수가 10을 초과하므로 다음 루프로 넘깁니다.")
+                logger.info(f"score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}")
                 continue
-            score = coverage * dbcv
+
+            # uniformity가 0.5 미만이면 다음 루프로 진행
+            if uniformity < 0.5:
+                logger.info("uniformity가 0.5보다 작으므로 다음 루프로 넘깁니다.")
+                logger.info(f"score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}")
+                continue
+
+            score = coverage * dbcv * uniformity
 
             if score > best_score:
                 best_score = score
@@ -204,9 +243,9 @@ if __name__ == "__main__":
                     yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
                 best_msg = (
-                    f"📈 New best → score={best_score:.4f} | cov={coverage:.6f}, dbcv={dbcv:.6f}" )
+                    f"📈 New best → score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}" )
                 logger.info(best_msg)
-                pbar.write("\n" + best_msg)
+                pbar.write("\n")
 
             pbar.update(1)
 
