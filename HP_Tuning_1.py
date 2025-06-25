@@ -198,7 +198,7 @@ if __name__ == "__main__":
         for ms, mcs in product([50], [500, 1000, 2000])
     ]
 
-    total_iter = len(umap_grid) * len(hdbscan_grid) // 2
+    total_iter = len(umap_grid) * len(hdbscan_grid)
     pbar = tqdm(total=total_iter, desc="Grid Search", ncols=110, colour="cyan")
 
     best_score = float("-inf")
@@ -206,48 +206,49 @@ if __name__ == "__main__":
 
     for u_params in umap_grid:
         for h_params in hdbscan_grid:
-            result = evaluate(args.method, u_params, h_params, df, args.seed, logger)
+            try:
+                result = evaluate(args.method, u_params, h_params, df, args.seed, logger)
 
-            if result is None:
-                continue
-            coverage, dbcv, n_clusters, uniformity = result
+                if result is None:
+                    continue
+                coverage, dbcv, n_clusters, uniformity = result
 
-            msg = f"n_clusters: {n_clusters}"
-            logger.info(msg)
-            pbar.write("\n " + msg)
+                msg = f"n_clusters: {n_clusters}"
+                logger.info(msg)
+                pbar.write("\n " + msg)
 
-            # 클러스터 수가 args.max_clusters을 넘어가면 다음 루프로 진행
-            if n_clusters > args.max_clusters:
-                logger.info("클러스터 수가 10을 초과하므로 다음 루프로 넘깁니다.")
-                logger.info(f"score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}")
-                continue
+                # 클러스터 수가 args.max_clusters을 넘어가면 다음 루프로 진행
+                if n_clusters > args.max_clusters:
+                    logger.info("클러스터 수가 10을 초과하므로 다음 루프로 넘깁니다.")
+                    logger.info(f"score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}")
+                    continue
 
-            # uniformity가 0.5 미만이면 다음 루프로 진행
-            if uniformity < 0.5:
-                logger.info("uniformity가 0.5보다 작으므로 다음 루프로 넘깁니다.")
-                logger.info(f"score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}")
-                continue
+                # uniformity가 0.5 미만이면 다음 루프로 진행
+                if uniformity < 0.5:
+                    logger.info("uniformity가 0.5보다 작으므로 다음 루프로 넘깁니다.")
+                    logger.info(f"score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}")
+                    continue
 
-            score = coverage * dbcv * uniformity
+                score = coverage * dbcv * uniformity
 
-            if score > best_score:
-                best_score = score
+                if score > best_score:
+                    best_score = score
 
-                best_params = {
-                    "setting": setting,
-                    "n_clusters": n_clusters,
-                    "umap_params": u_params,
-                    "hdbscan_params": h_params }
+                    best_params = {
+                        "setting": setting,
+                        "n_clusters": n_clusters,
+                        "umap_params": u_params,
+                        "hdbscan_params": h_params }
 
-                with open(yaml_path, "w", encoding="utf-8") as f:
-                    yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
+                    with open(yaml_path, "w", encoding="utf-8") as f:
+                        yaml.dump(best_params, f, sort_keys=False, allow_unicode=True, indent=4)
 
-                best_msg = (
-                    f"📈 New best → score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}" )
-                logger.info(best_msg)
+                    best_msg = (
+                        f"📈 New best → score={best_score:.4f} | cov={coverage:.4f}, dbcv={dbcv:.4f} | uniformity={uniformity:.4f}" )
+                    logger.info(best_msg)
+            finally:
                 pbar.write("\n")
-
-            pbar.update(1)
+                pbar.update(1)
 
     pbar.close()
 
