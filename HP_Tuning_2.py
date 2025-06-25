@@ -120,6 +120,15 @@ if __name__ == "__main__":
     os.makedirs("results", exist_ok=True)
     os.makedirs("yaml", exist_ok=True)
 
+    # 저장할 기본 세팅값
+    setting = {
+        "seed": args.seed,
+        "n_samples": args.sample,
+        "dropna": args.dropna,
+        "method": args.method,
+        "max_clusters": args.max_clusters
+    }
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_prefix = f"{args.save_name}_{timestamp}"
 
@@ -186,9 +195,7 @@ if __name__ == "__main__":
                 best_score = score
 
                 best_params = {
-                    "n_samples": args.sample,
-                    "dropna": args.dropna,
-                    "method": args.method,
+                    "setting": setting,
                     "n_clusters": n_clusters,
                     "umap_params": u_params,
                     "hdbscan_params": h_params }

@@ -116,6 +116,15 @@ if __name__ == "__main__":
 
     args = get_args()
     set_global_seed(args.seed)
+    
+    # 저장할 기본 세팅값
+    setting = {
+        "seed": args.seed,
+        "n_samples": args.sample,
+        "dropna": args.dropna,
+        "method": args.method,
+        "max_clusters": args.max_clusters
+    }
 
     os.makedirs("results", exist_ok=True)
     os.makedirs("yaml", exist_ok=True)
@@ -186,9 +195,7 @@ if __name__ == "__main__":
                 best_score = score
 
                 best_params = {
-                    "n_samples": args.sample,
-                    "dropna": args.dropna,
-                    "method": args.method,
+                    "setting": setting,
                     "n_clusters": n_clusters,
                     "umap_params": u_params,
                     "hdbscan_params": h_params }
